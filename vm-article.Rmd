@@ -1,0 +1,179 @@
+---
+title: "Implementing a Simple Stack VM and Assembler in R!"
+author: "Alex Kraieski"
+date: "2/14/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Create the Initial Machine State
+
+First, we need an object to hold the the machine state. The function below will create an "environment" object with an empty stack, allocated storage for program instructions, and an instruction pointer set to 1:
+
+```{r}
+initVM <- function(program_length = 10){
+  stack <- vector(mode = "list", length = 5)
+  instructions <- vector(mode = "list", length = 10)
+  
+  
+  as.environment(list(stack = stack, instructions = instructions, ip = 1L))
+}
+
+```
+
+## Machine Instructions
+
+Now that we can create the initial machine state, we need to implement a basic "instruction set" to actually be able to run operations in the machine. These instructions will be implemented as R functions that return an "environment" object containing the changed machine state.
+
+First, we need functions to push values to the LIFO stack and pop the stack:
+
+```{r}
+push.stack <- function(vm, x){
+  vm$stack <- c(x, vm$stack)
+  vm
+}
+
+pop.stack <- function(vm){
+  vm$stack <- vm$stack[2: length(vm$stack)]
+  vm
+}
+```
+  
+Let's add some arithmetic operations. This function will pop the first two values off the stack and then push their sum to the stack:
+
+```{r}
+add.stack <- function(vm){
+  
+  x <- vm$stack[[1]]
+  y <- vm$stack[[2]]
+  
+  vm1 <- pop.stack(vm)
+  vm1 <- pop.stack(vm1)
+  
+  sum <- x + y
+  
+  push.stack(vm1, sum)
+}
+```
+
+We also need to be able to increment the instruction pointer after each operation, so I defined a function a function for that too:
+
+```{r}
+increment.ip <- function(vm){
+  new_ip <- vm$ip + 1L
+  
+  vm1 <- vm
+  vm1$ip <- new_ip
+  vm1
+}
+```
+
+## Assembler
+
+Next, I needed an assembler to generate the "machine code" that gets passed to `vm$instructions`.
+
+I started by writing some "assembly" code that can represent computations with the functions defined above. I used semicolons to mark the end of each instruction to make parsing easier.
+```{r}
+asm <- 
+  "push 1;
+   pop;
+   push 5;
+   push 4;
+   add;"
+```
+
+This "program" pushes 1 to the stack, pops it back off, then pushes 4 and 5 to the stacks and adds them. The return value should be 9.
+
+The task of transforming this assembly code into a program that can be run in the VM can be broken down into 3 smaller parts:
+
+1. Parse the code into a character vector where each instruction gets its own element
+2. Tranlate those instructions to strings containing the R function calls for the machine operations
+3. Parse these strings to expressions and compile the resulting expressions to bytecode using the "compiler" package
+  
+I found it easiest to address part 2 first. I wrote this function to translate individual lines of assembly code to strings of R code:
+
+```{r}
+library(stringr)
+
+as.instructions <- function(asm){
+  if(str_detect(asm, "push")){
+    
+    val <- str_remove(asm, "push ")
+    
+    return(paste0("push.stack(vm, ", val, ")"))
+    
+  } else if(str_detect(asm, "pop")) return("pop.stack(vm)")
+    else if(str_detect(asm, "add")) return("add.stack(vm)")
+    else stop("Invalid instructions")
+}
+
+# example
+as.instructions("push 1")
+```
+
+Now, my main assembler function can call this function after using functions from the "stringr" package to parse the assembly code into individual operations. Here is the final assembler function:
+
+```{r}
+
+
+assemble <- function(asm){
+  asm1 <- str_replace_all(asm, "\n", "")
+  
+  asm2 <- str_trim(unlist(str_split(asm1, ";")))
+  
+  asm3 <- asm2[asm2 != ""]
+  
+  r_instructions <- lapply(asm3, as.instructions)
+  
+  purrr::map(r_instructions, function(x){
+    compiler::compile(rlang::parse_expr(eval(x)))
+  })
+  
+}
+```
+
+Now, let's assemble the example program from above:
+
+```{r}
+test_program <- assemble(asm)
+
+test_program
+```
+  
+With the assembler seemingly working, we are getting close to actually being able to run programs!
+
+## Final Pieces
+
+Now we just need to be able to load programs into the vm and execute them. Two more functions will do the trick:
+```{r}
+load.program <- function(vm, instructions){
+  vm2 <- vm
+  vm2$instructions <- instructions
+  
+  vm2
+}
+
+run.program <- function(instructions){
+  vm <- initVM(program_length = length(instructions))
+  
+  vm <- load.program(vm, instructions)
+  
+  while(vm$ip <= length(instructions)){
+    vm2 <- eval(vm$instructions[[vm$ip]])
+    vm <- increment.ip(vm2)
+    }
+  
+  vm$stack[[1]]
+}
+
+```
+
+Now let's try running the program we compiled earlier:
+```{r}
+run.program(test_program)
+```
+
+Success! Just as expected, it returns 9.

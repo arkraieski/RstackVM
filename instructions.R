@@ -1,7 +1,7 @@
 
-initVM <- function(){
+initVM <- function(program_length = 10){
   stack <- vector(mode = "list", length = 5)
-  instructions <- list()
+  instructions <- vector(mode = "list", length = 10)
   
   
   as.environment(list(stack = stack, instructions = instructions, ip = 1L))
@@ -33,7 +33,9 @@ add.stack <- function(vm){
   vm1 <- pop.stack(vm)
   vm1 <- pop.stack(vm1)
   
-  push.stack(vm1, x + y)
+  sum <- x + y
+  
+  push.stack(vm1, sum)
 }
 
 increment.ip <- function(vm){
@@ -42,4 +44,11 @@ increment.ip <- function(vm){
   vm1 <- vm
   vm1$ip <- new_ip
   vm1
+}
+
+load.program <- function(vm, instructions){
+  vm2 <- vm
+  vm2$instructions <- instructions
+  
+  vm2
 }

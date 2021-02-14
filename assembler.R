@@ -7,9 +7,9 @@ asm <-
    add;"
 
 
-asm1 <- str_replace_all(asm, "\n", "")
-
-asm2 <- str_trim(unlist(str_split(asm1, ";")))
+# asm1 <- str_replace_all(asm, "\n", "")
+# 
+# asm2 <- str_trim(unlist(str_split(asm1, ";")))
 
 as.instructions <- function(asm){
   if(str_detect(asm, "push")){
@@ -34,8 +34,8 @@ assemble <- function(asm){
   
   r_instructions <- lapply(asm3, as.instructions)
   
-  lapply(r_instructions, function(x){
-    compiler::compile(parse(s = substitute(x)))
+  purrr::map(r_instructions, function(x){
+    compiler::compile(rlang::parse_expr(eval(x)))
   })
   
 }
